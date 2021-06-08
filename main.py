@@ -156,6 +156,9 @@ def generatePem(passphrase=None):
     )
     print(f"{private_pem}\n{public_pem}")
 
+def signRoot(key,root):
+    pass
+
 if __name__ == '__main__':
 
     merkle_tree = MerkleTree()
@@ -180,6 +183,8 @@ if __name__ == '__main__':
             print(merkle_tree.validPath(2, merkle_tree.hash(user_string), tree_root, leaf_path))
         elif user_number_choice.__eq__('5'):
             generatePem()
+        elif user_number_choice.__eq__('5'):
+            signRoot('key',)
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
             break
