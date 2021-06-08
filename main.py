@@ -10,114 +10,146 @@ class MerkleTree:
         size - the numbers of leaf in the tree
         also it initiate the tree as empty in the begin
         """
-        self.size = 0  # number of leaf nodes in tree
-        self.initiate_tree()  # create empty mht
+        self.hash_tree = {}
+        self.size = 0
+        # self.initiate_tree()  # create empty mht
 
-    def add_leaf(self, string):
-        hash_leaf = self.hash(string)
-        self.size += 1
-        self._storeNode(self.size - 1, self.size, hash_leaf)
-        print(string + " is hashed to the value :" + hash_leaf)
-
-    def mth(self, k1, k2):
-        """ Merkle Tree Hash funcion recursively creates required nodes"""
-        try:
-            mNode = self._retrieveNode(k1, k2)
-        except KeyError as v:  # no stored node, so make one
-            k = k1 + largestPower2(k2 - k1)
-            mNode = self.hash(self.mth(k1, k) + self.mth(k, k2))
-            self._storeNode(k1, k2, mNode)
-        return mNode
-
-    def auditPath(self, m, n=None):
-        """ return a list of hash values for entry d(m) that proves
-            that d(m) is contained in the nth root hash with 0 <= m < n
+    def add_leaf(self, leaf_data):
         """
-        if not n:
-            n = self.size
+        add lead to the tree and hash the data
+        :param leaf_data: the data to add and to hash
+        :return:
+        """
+        hash_leaf = hash256(leaf_data)
+        self.size += 1
+        # store the hashed lead as tree node in the following format:
+        # (i , i+1)
+        self.save_node(self.size - 1, self.size, hash_leaf)
 
-        def _auditPath(m, k1, k2):
-            """ Recursively collect audit path """
-            if (k2 - k1) == 1:
-                return []  # terminate with null list when range is a single node
-            k = k1 + largestPower2(k2 - k1)
-            if m < k:
-                path = _auditPath(m, k1, k) + [("1" + self.mth(k, k2)), ]
-            else:
-                path = _auditPath(m, k, k2) + [("0" + self.mth(k1, k)), ]
-            return path
+    def merkle_tree_calculation(self, l_index, r_index):
+        """
+        calculate recursively the nodes and create new one in case it doesn't exist
+        :param l_index:
+        :param r_index:
+        :return: the node number (l_index , r_index)
+        """
+        try:
+            merkle_node = self.get_node(l_index, r_index)
+        except KeyError:  # no stored node, so make one TODO: maybe change more
+            shared_index = l_index + closest_power(r_index - l_index)
+            merkle_node = hash256(self.merkle_tree_calculation(l_index, shared_index)
+                                  + self.merkle_tree_calculation(shared_index, r_index))
+            self.save_node(l_index, r_index, merkle_node)
+        return merkle_node
 
-        return _auditPath(m, 0, n)
+    def rec_find_proof_of_inclusion(self, node_to_proof, left, right):
+        """
+        collects recursively the proof path to node_to_proof
+        :param node_to_proof:
+        :param left: node left index
+        :param right: node right index
+        :return:
+        """
+        # checks if the range is of one node. in such case return empty list
+        if (right - left) == 1:
+            return []
+        k = left + closest_power(right - left)
+        if node_to_proof < k:
+            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, left, k) + [("1" + self.merkle_tree_calculation(k, right)), ]
+        else:
+            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, k, right) + [("0" + self.merkle_tree_calculation(left, k)), ]
+        return proof_path
 
-    def validPath(self, m, leaf_hash, root_hash, audit_path, n=None):
-        """ Test if leaf_hash is contained under a root_hash
-            as demonstrated by the audit_path """
-        edge_list = list(audit_path.split(" "))
+    def find_proof_of_inclusion(self, node_to_proof):
+        """
+        returns a list of hashed value
+        :param node_to_proof: the node we look for to prove it contains to the tree
+        :return: the path proof
+        """
+        return self.rec_find_proof_of_inclusion(node_to_proof, 0, self.size)
+
+    def validate_proof_of_inclusion(self, leaf_hash, root_hash, proof_of_inclusion):
+        """
+        checks if the proof of inclusion to leaf is true or not
+        :param leaf_hash: the leaf to check if the path is true
+        :param root_hash: the tree root
+        :param proof_of_inclusion: the path
+        :return: true or false
+        """
+        edge_list = list(proof_of_inclusion.split(" "))
         for edge in edge_list:
             side = edge[0:1]
             leaf = edge[1:len(edge)]
             if side == "0":
-                leaf_hash = self.hash(leaf + leaf_hash)
+                leaf_hash = hash256(leaf + leaf_hash)
             else:
-                leaf_hash = self.hash(leaf_hash + leaf)
+                leaf_hash = hash256(leaf_hash + leaf)
 
         if leaf_hash == root_hash:
             return True
         else:
             return False
 
-    def rootHash(self, n=None):
-        """ Root hash of tree for nth root """
-        if not n:
-            n = self.size
-        if n > 0:
-            return self.mth(0, n)
+    def tree_root_calculate(self):
+        """
+        calculates the root of the tree.
+        if it empty so return empty string
+        :return: the tree root. thus means node number (0, tree size)
+        """
+        if self.size > 0:
+            return self.merkle_tree_calculation(0, self.size)
         else:
-            return self.hash('')  # empty tree is hash of null string
+            return hash('')
 
-    def leafHash(self, m):
-        """ Leaf hash value for mth entry """
-        return self.mth(m, m + 1)
-
-    def hash(self, input):
-        """ Wrapper for hash functions """
-        return sha256(input.encode('utf-8')).hexdigest()
-
-    # Overload the following for persistant trees
-    def initiate_tree(self):
-        self.hash_tree = {}
-
-    def _retrieveNode(self, k1, k2):
+    def get_node(self, k1, k2):
         return self.hash_tree[(k1, k2)]
 
-    def _storeNode(self, k1, k2, mNode):
-        # leaf and non-leaf nodes in the same dictionary indexed by range tuple
-        assert k1 < k2 <= self.size
-        self.hash_tree[(k1, k2)] = mNode
+    def save_node(self, l_index, r_index, hashed_node):
+        """
+        Saves all the nodes into the dictionary in the following format:
+        [i , i+1] = hashed data
+        :param l_index: left index
+        :param r_index: right index
+        :param hashed_node: the hashed data
+        :return:
+        """
+        assert l_index < r_index <= self.size  # TODO: check if it needed
+        self.hash_tree[(l_index, r_index)] = hashed_node
 
 
-def largestPower2(n):
+def closest_power(number):
+    """
+    a util function that helps to find the closest biggest power 2 to n
+    :param number:
+    :return:
+    """
     """ Return the largest power of 2 less than n """
-    lp2 = 1
-    while lp2 < n:
-        lp2 = lp2 << 1
-    return lp2 >> 1
+    biggest_power = 1
+    while biggest_power < number:
+        biggest_power = biggest_power << 1
+    return biggest_power >> 1
 
 
-def parse_user_input(user_in, secondary_input=False):
-    if not secondary_input:
-        if user_in.__contains__(" "):
-            number, string = user_in.split(sep=" ", maxsplit=1)
-        else:
-            return user_in, None
-    else:
+def parse_user_input(user_in):
+    """
+    parse first user input into number and some string
+    :param user_in: all the user input to parse
+    :return: parse data. the number and the string
+    """
+    if user_in.__contains__(" "):
         number, string = user_in.split(sep=" ", maxsplit=1)
-        if string is not None:
-            string = string.split(" ")
+    else:
+        return user_in, None
     return number, string
 
 
 def prepare_result_to_print(root, path):
+    """
+    responsible to print the result as following: root + path
+    :param root:
+    :param path:
+    :return:
+    """
     single_list = root
     if not path:
         return single_list
@@ -128,6 +160,11 @@ def prepare_result_to_print(root, path):
 
 
 def parse_user_path_input(user_in):
+    """
+    in case of input 4, this function returns the root from the input and the path to validate
+    :param user_in: user input to validate
+    :return: separate root and path
+    """
     root, path = user_in.split(sep=" ", maxsplit=1)
     return root, path
 
@@ -156,28 +193,35 @@ def generatePem(passphrase=None):
     )
     print(f"{private_pem}\n{public_pem}")
 
+def hash256(node_data):
+    """
+    takes the data and make hash using sha 256 to this data
+    :param node_data: the data to do the hash to
+    :return: hashed data
+    """
+    return sha256(node_data.encode('utf-8')).hexdigest()
+
+
 if __name__ == '__main__':
 
     merkle_tree = MerkleTree()
 
     while True:
         user_input = input()
-        user_number_choice, user_string = parse_user_input(user_input)  # TODO: is it possiable to get space in the data
-        if user_number_choice.__eq__('0'):
-            print("the number is " + user_input)
-        elif user_number_choice.__eq__('1'):
-            test = sha256(user_string.encode('utf-8')).hexdigest()
-            merkle_tree.add_leaf(string=user_string)
+        user_number_choice, user_string = parse_user_input(user_input)
+
+        if user_number_choice.__eq__('1'):
+            merkle_tree.add_leaf(leaf_data=user_string)
         elif user_number_choice.__eq__('2'):
-            print(merkle_tree.rootHash())
+            print(merkle_tree.tree_root_calculate())
         elif user_number_choice.__eq__('3'):
-            path_list = merkle_tree.auditPath(int(user_string))
-            list_to_print = prepare_result_to_print(root=merkle_tree.rootHash(), path=path_list)
+            path_list = merkle_tree.find_proof_of_inclusion(int(user_string))
+            list_to_print = prepare_result_to_print(root=merkle_tree.tree_root_calculate(), path=path_list)
             print(list_to_print)
         elif user_number_choice.__eq__('4'):
             user_input = input()
             tree_root, leaf_path = parse_user_path_input(user_input)
-            print(merkle_tree.validPath(2, merkle_tree.hash(user_string), tree_root, leaf_path))
+            print(merkle_tree.validate_proof_of_inclusion(hash256(user_string), tree_root, leaf_path))
         elif user_number_choice.__eq__('5'):
             generatePem()
         elif user_number_choice.__eq__('exit'):
