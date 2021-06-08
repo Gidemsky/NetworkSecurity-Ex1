@@ -12,8 +12,6 @@ class MerkleTree:
         self.initiate_tree()  # create empty mht
 
     def add_leaf(self, string):
-        # print(string)
-        # print(chr(0) + string)
         hash_leaf = self.hash(string)
         self.size += 1
         self._storeNode(self.size - 1, self.size, hash_leaf)
@@ -57,10 +55,8 @@ class MerkleTree:
             side = edge[0:1]
             leaf = edge[1:len(edge)]
             if side == "0":
-                test = leaf + leaf_hash
                 leaf_hash = self.hash(leaf + leaf_hash)
             else:
-                test = leaf_hash + leaf
                 leaf_hash = self.hash(leaf_hash + leaf)
 
         if leaf_hash == root_hash:
@@ -70,7 +66,8 @@ class MerkleTree:
 
     def rootHash(self, n=None):
         """ Root hash of tree for nth root """
-        if not n: n = self.size
+        if not n:
+            n = self.size
         if n > 0:
             return self.mth(0, n)
         else:
@@ -144,7 +141,6 @@ if __name__ == '__main__':
             print("the number is " + user_input)
         elif user_number_choice.__eq__('1'):
             test = sha256(user_string.encode('utf-8')).hexdigest()
-            print("the user value is : " + user_string + " and the hash is : " + test)
             merkle_tree.add_leaf(string=user_string)
         elif user_number_choice.__eq__('2'):
             print(merkle_tree.rootHash())
@@ -155,8 +151,6 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('4'):
             user_input = input()
             tree_root, leaf_path = parse_user_path_input(user_input)
-            test = sha256(user_string.encode('utf-8'))
-            print(test)
             print(merkle_tree.validPath(2, merkle_tree.hash(user_string), tree_root, leaf_path))
             print("the number is " + user_input)
         elif user_number_choice.__eq__('exit'):
