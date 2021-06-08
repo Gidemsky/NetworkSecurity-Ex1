@@ -152,7 +152,6 @@ if __name__ == '__main__':
             user_input = input()
             tree_root, leaf_path = parse_user_path_input(user_input)
             print(merkle_tree.validPath(2, merkle_tree.hash(user_string), tree_root, leaf_path))
-            print("the number is " + user_input)
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
             break
