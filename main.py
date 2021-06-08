@@ -1,5 +1,7 @@
 from hashlib import sha256
-
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
 
 class MerkleTree:
 
@@ -129,6 +131,30 @@ def parse_user_path_input(user_in):
     root, path = user_in.split(sep=" ", maxsplit=1)
     return root, path
 
+def generatePem(passphrase=None):
+    if passphrase:
+        algorithm = serialization.BestAvailableEncryption(password=passphrase.encode('utf-8'))
+    else:
+        algorithm = serialization.NoEncryption()
+
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=algorithm)
+
+    public_key = private_key.public_key()
+    
+    public_pem = public_key.public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+    print(f"{private_pem}\n{public_pem}")
 
 if __name__ == '__main__':
 
@@ -152,6 +178,8 @@ if __name__ == '__main__':
             user_input = input()
             tree_root, leaf_path = parse_user_path_input(user_input)
             print(merkle_tree.validPath(2, merkle_tree.hash(user_string), tree_root, leaf_path))
+        elif user_number_choice.__eq__('5'):
+            generatePem()
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
             break
