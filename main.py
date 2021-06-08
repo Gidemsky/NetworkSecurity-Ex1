@@ -99,7 +99,7 @@ class MerkleTree:
         if self.size > 0:
             return self.merkle_tree_calculation(0, self.size)
         else:
-            return hash('')
+            return hash256('')
 
     def get_node(self, k1, k2):
         return self.hash_tree[(k1, k2)]
@@ -168,6 +168,7 @@ def parse_user_path_input(user_in):
     root, path = user_in.split(sep=" ", maxsplit=1)
     return root, path
 
+
 def generatePem(passphrase=None):
     if passphrase:
         algorithm = serialization.BestAvailableEncryption(password=passphrase.encode('utf-8'))
@@ -195,6 +196,15 @@ def generatePem(passphrase=None):
 
 def signRoot(key,mktree):
     pass
+
+def hash256(node_data):
+    """
+    takes the data and make hash using sha 256 to this data
+    :param node_data: the data to do the hash to
+    :return: hashed data
+    """
+    return sha256(node_data.encode('utf-8')).hexdigest()
+
 
 if __name__ == '__main__':
 
