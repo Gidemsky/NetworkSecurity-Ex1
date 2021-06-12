@@ -1,7 +1,12 @@
+import base64
 from hashlib import sha256
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from base64 import b64encode
 
 class MerkleTree:
 
@@ -194,8 +199,35 @@ def generatePem(passphrase=None):
     )
     print(f"{private_pem}\n{public_pem}")
 
-def signRoot(key,mktree):
-    pass
+def signRoot(pr_key,root):
+    pr_key = serialization.load_pem_private_key(pr_key.encode(), password=None)
+    if root is not None:
+        signature = pr_key.sign(
+            root.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+    return b64encode(signature).decode()
+
+def verify(pub_key, signature, msg):
+    pub_key = serialization.load_pem_private_key(pub_key.encode())
+    try:
+        pub_key.verify(
+            base64.decodebytes(signature.encode()),
+            msg.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+
+        return True
+    except InvalidSignature:
+        return False
 
 def hash256(node_data):
     """
@@ -228,7 +260,7 @@ if __name__ == '__main__':
             print(merkle_tree.validate_proof_of_inclusion(hash256(user_string), tree_root, leaf_path))
         elif user_number_choice.__eq__('5'):
             generatePem()
-        elif user_number_choice.__eq__('5'):
+        elif user_number_choice.__eq__('6'):
             signRoot('key',)
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
