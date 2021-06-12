@@ -261,7 +261,10 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('5'):
             generatePem()
         elif user_number_choice.__eq__('6'):
-            signRoot('key',)
+            signRoot(user_string, merkle_tree.tree_root_calculate())
+        elif user_number_choice.__eq__('7'):
+            print("This is 7")
+            # verify(user_string ,merkle_tree)
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
             break
