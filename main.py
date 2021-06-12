@@ -253,7 +253,8 @@ def signRoot(pr_key,root):
         )
     return b64encode(signature).decode()
 
-def verify(pub_key, signature, msg):
+def verify(string):
+    pub_key, signature, msg = string.split('\n')
     pub_key = serialization.load_pem_private_key(pub_key.encode())
     try:
         pub_key.verify(
@@ -306,7 +307,7 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('6'):
             signRoot(user_string, merkle_tree.tree_root_calculate())
         elif user_number_choice.__eq__('7'):
-            verify(user_string ,merkle_tree)
+            verify(user_string)
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
