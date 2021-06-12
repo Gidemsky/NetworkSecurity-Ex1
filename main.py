@@ -211,8 +211,8 @@ def parse_user_path_input(user_in):
     :param user_in: user input to validate
     :return: separate root and path
     """
-    root, path = user_in.split(sep=" ", maxsplit=1)
-    return root, path
+    user_data_input, root, path = user_in.split(sep=" ", maxsplit=2)
+    return user_data_input, root, path
 
 
 def generatePem(passphrase=None):
@@ -233,7 +233,7 @@ def generatePem(passphrase=None):
         encryption_algorithm=algorithm)
 
     public_key = private_key.public_key()
-    
+
     public_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
@@ -299,9 +299,8 @@ if __name__ == '__main__':
             list_to_print = prepare_result_to_print(root=merkle_tree.tree_root_calculate(), path=path_list)
             print(list_to_print)
         elif user_number_choice.__eq__('4'):
-            user_input = input()
-            tree_root, leaf_path = parse_user_path_input(user_input)
-            print(merkle_tree.validate_proof_of_inclusion(hash256(user_string), tree_root, leaf_path))
+            leaf_data, tree_root, leaf_path = parse_user_path_input(user_string)
+            print(merkle_tree.validate_proof_of_inclusion(hash256(leaf_data), tree_root, leaf_path))
         elif user_number_choice.__eq__('5'):
             generatePem()
         elif user_number_choice.__eq__('6'):
