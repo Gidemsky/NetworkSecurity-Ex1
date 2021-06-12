@@ -238,7 +238,7 @@ def generatePem(passphrase=None):
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
-    print(f"{private_pem}\n{public_pem}")
+    print(f"{private_pem.decode()}\n{public_pem.decode()}")
 
 def signRoot(pr_key,root):
     pr_key = serialization.load_pem_private_key(pr_key.encode(), password=None)
@@ -306,8 +306,7 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('6'):
             signRoot(user_string, merkle_tree.tree_root_calculate())
         elif user_number_choice.__eq__('7'):
-            print("This is 7")
-            # verify(user_string ,merkle_tree)
+            verify(user_string ,merkle_tree)
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
