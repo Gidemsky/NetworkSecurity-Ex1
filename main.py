@@ -233,13 +233,12 @@ def generatePem(passphrase=None):
         encryption_algorithm=algorithm)
 
     public_key = private_key.public_key()
-
+    
     public_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
     print(f"{private_pem}\n{public_pem}")
-
 
 def signRoot(pr_key,root):
     pr_key = serialization.load_pem_private_key(pr_key.encode(), password=None)
@@ -253,7 +252,6 @@ def signRoot(pr_key,root):
             hashes.SHA256()
         )
     return b64encode(signature).decode()
-
 
 def verify(pub_key, signature, msg):
     pub_key = serialization.load_pem_private_key(pub_key.encode())
@@ -271,7 +269,6 @@ def verify(pub_key, signature, msg):
         return True
     except InvalidSignature:
         return False
-
 
 def hash256(node_data):
     """
@@ -307,7 +304,10 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('5'):
             generatePem()
         elif user_number_choice.__eq__('6'):
-            signRoot('key',)
+            signRoot(user_string, merkle_tree.tree_root_calculate())
+        elif user_number_choice.__eq__('7'):
+            print("This is 7")
+            # verify(user_string ,merkle_tree)
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
