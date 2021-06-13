@@ -145,7 +145,7 @@ class MerkleTree:
         if self.size > 0:
             return self.merkle_tree_calculation(0, self.size)
         else:
-            return hash256('')
+            return ""
 
     def get_node(self, k1, k2):
         return self.hash_tree[(k1, k2)]
