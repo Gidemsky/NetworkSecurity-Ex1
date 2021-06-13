@@ -8,16 +8,23 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from base64 import b64encode
 
+
 class MerkleTree:
 
-    def __init__(self):
+    def __init__(self, sparse=False):
         """
         size - the numbers of leaf in the tree
         also it initiate the tree as empty in the begin
         """
         self.hash_tree = {}
         self.size = 0
-        # self.initiate_tree()  # create empty mht
+        self.default_hash_level = {}
+        self.is_sparse = sparse
+        self.leaf_to_change_digested_root = None
+
+    # def update_tree_values(self, path_to_leaf):
+    #     direction = [char for char in path_to_leaf]
+    #     direction_size = direction.__len__()
 
     def add_leaf(self, leaf_data):
         """
@@ -25,11 +32,24 @@ class MerkleTree:
         :param leaf_data: the data to add and to hash
         :return:
         """
-        hash_leaf = hash256(leaf_data)
-        self.size += 1
-        # store the hashed lead as tree node in the following format:
-        # (i , i+1)
-        self.save_node(self.size - 1, self.size, hash_leaf)
+        if self.is_sparse:
+            self.leaf_to_change_digested_root = "{0:08b}".format(int(leaf_data, 16))
+            # self.update_tree_values(self.leaf_to_change_digested_root)
+        else:
+            hash_leaf = hash256(leaf_data)
+            self.size += 1
+            # store the hashed lead as tree node in the following format:
+            # (i , i+1)
+            self.save_node(self.size - 1, self.size, hash_leaf)
+
+    def init_defaults(self):
+        i = 255
+        leaf_value = "0"
+        while i >= 0:
+            e = hash256(leaf_value + leaf_value)
+            leaf_value = e
+            self.default_hash_level[i] = e
+            i -= 1
 
     def merkle_tree_calculation(self, l_index, r_index):
         """
@@ -40,7 +60,7 @@ class MerkleTree:
         """
         try:
             merkle_node = self.get_node(l_index, r_index)
-        except KeyError:  # no stored node, so make one TODO: maybe change more
+        except KeyError:
             shared_index = l_index + closest_power(r_index - l_index)
             merkle_node = hash256(self.merkle_tree_calculation(l_index, shared_index)
                                   + self.merkle_tree_calculation(shared_index, r_index))
@@ -60,9 +80,11 @@ class MerkleTree:
             return []
         k = left + closest_power(right - left)
         if node_to_proof < k:
-            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, left, k) + [("1" + self.merkle_tree_calculation(k, right)), ]
+            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, left, k) + [
+                ("1" + self.merkle_tree_calculation(k, right)), ]
         else:
-            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, k, right) + [("0" + self.merkle_tree_calculation(left, k)), ]
+            proof_path = self.rec_find_proof_of_inclusion(node_to_proof, k, right) + [
+                ("0" + self.merkle_tree_calculation(left, k)), ]
         return proof_path
 
     def find_proof_of_inclusion(self, node_to_proof):
@@ -101,6 +123,25 @@ class MerkleTree:
         if it empty so return empty string
         :return: the tree root. thus means node number (0, tree size)
         """
+        if self.is_sparse:
+            direction = [char for char in self.leaf_to_change_digested_root]
+
+            def rec_root_calc(step_in_direction, counter):
+                counter += 1
+                if step_in_direction.__len__() == 1:
+                    if step_in_direction[0].__eq__('1'):
+                        return hash256("0") + hash256("1")
+                    else:
+                        return hash256("1") + hash256("0")
+                if step_in_direction[0].__eq__('1'):
+                    return hash256(self.default_hash_level[counter] + rec_root_calc(step_in_direction[1:], counter))
+                else:
+                    return hash256(rec_root_calc(step_in_direction[1:], counter) + self.default_hash_level[counter])
+            if direction[0].__eq__('1'):
+                return hash256(self.default_hash_level[1] + rec_root_calc(direction[1:], 1))
+            else:
+                return hash256(rec_root_calc(direction[0], 1) + self.default_hash_level[1])
+
         if self.size > 0:
             return self.merkle_tree_calculation(0, self.size)
         else:
@@ -192,12 +233,13 @@ def generatePem(passphrase=None):
         encryption_algorithm=algorithm)
 
     public_key = private_key.public_key()
-    
+
     public_pem = public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo
     )
     print(f"{private_pem}\n{public_pem}")
+
 
 def signRoot(pr_key,root):
     pr_key = serialization.load_pem_private_key(pr_key.encode(), password=None)
@@ -211,6 +253,7 @@ def signRoot(pr_key,root):
             hashes.SHA256()
         )
     return b64encode(signature).decode()
+
 
 def verify(pub_key, signature, msg):
     pub_key = serialization.load_pem_private_key(pub_key.encode())
@@ -229,6 +272,7 @@ def verify(pub_key, signature, msg):
     except InvalidSignature:
         return False
 
+
 def hash256(node_data):
     """
     takes the data and make hash using sha 256 to this data
@@ -241,6 +285,8 @@ def hash256(node_data):
 if __name__ == '__main__':
 
     merkle_tree = MerkleTree()
+    sparse_merkle_tree = MerkleTree(True)
+    sparse_merkle_tree.init_defaults()
 
     while True:
         user_input = input()
@@ -262,6 +308,10 @@ if __name__ == '__main__':
             generatePem()
         elif user_number_choice.__eq__('6'):
             signRoot('key',)
+        elif user_number_choice.__eq__('8'):
+            sparse_merkle_tree.add_leaf(user_string)
+        elif user_number_choice.__eq__('9'):
+            print(sparse_merkle_tree.tree_root_calculate())
         elif user_number_choice.__eq__('exit'):
             print("bye bye! ")
             break
