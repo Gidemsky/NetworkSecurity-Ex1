@@ -1,11 +1,11 @@
 import base64
 from hashlib import sha256
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
+# from cryptography.exceptions import InvalidSignature
+# from cryptography.hazmat.primitives.asymmetric import rsa
+# from cryptography.hazmat.backends import default_backend
+# from cryptography.hazmat.primitives import serialization
+# from cryptography.hazmat.primitives import hashes
+# from cryptography.hazmat.primitives.asymmetric import padding
 from base64 import b64encode
 
 
@@ -21,10 +21,6 @@ class MerkleTree:
         self.default_hash_level = {}
         self.is_sparse = sparse
         self.leaf_to_change_digested_root = None
-
-    # def update_tree_values(self, path_to_leaf):
-    #     direction = [char for char in path_to_leaf]
-    #     direction_size = direction.__len__()
 
     def add_leaf(self, leaf_data):
         """
@@ -211,8 +207,8 @@ def parse_user_path_input(user_in):
     :param user_in: user input to validate
     :return: separate root and path
     """
-    root, path = user_in.split(sep=" ", maxsplit=1)
-    return root, path
+    user_data_input, root, path = user_in.split(sep=" ", maxsplit=2)
+    return user_data_input, root, path
 
 
 def generatePem(passphrase=None):
@@ -299,26 +295,25 @@ if __name__ == '__main__':
             list_to_print = prepare_result_to_print(root=merkle_tree.tree_root_calculate(), path=path_list)
             print(list_to_print)
         elif user_number_choice.__eq__('4'):
-            user_input = input()
-            tree_root, leaf_path = parse_user_path_input(user_input)
+            user_string, tree_root, leaf_path = parse_user_path_input(user_string)
             print(merkle_tree.validate_proof_of_inclusion(hash256(user_string), tree_root, leaf_path))
-        elif user_number_choice.__eq__('5'):
-            generatePem()
-        elif user_number_choice.__eq__('6'):
-            raw = input()
-            while raw:
-                user_string +='\n'+raw
-                raw = input()
-            signRoot(user_string, merkle_tree.tree_root_calculate())
-        elif user_number_choice.__eq__('7'):
-            raw = input()
-            pub_key = user_string
-            while raw:
-                pub_key +='\n'+raw
-                raw = input()
-            raw = input()
-            raw = raw.split()
-            verify(pub_key, raw[0], raw[1])
+        # elif user_number_choice.__eq__('5'):
+        #     generatePem()
+        # elif user_number_choice.__eq__('6'):
+        #     raw = input()
+        #     while raw:
+        #         user_string +='\n'+raw
+        #         raw = input()
+        #     signRoot(user_string, merkle_tree.tree_root_calculate())
+        # elif user_number_choice.__eq__('7'):
+        #     raw = input()
+        #     pub_key = user_string
+        #     while raw:
+        #         pub_key +='\n'+raw
+        #         raw = input()
+        #     raw = input()
+        #     raw = raw.split()
+        #     verify(pub_key, raw[0], raw[1])
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
