@@ -21,7 +21,7 @@ class NodeLeaf:
 
 class MerkleTree:
 
-    def __init__(self, is_sparse=False, default="0"):
+    def __init__(self, is_sparse=False, depth=16, default="0"):
         """
         size - the numbers of leaf in the tree
         also it initiate the tree as empty in the begin
@@ -32,6 +32,7 @@ class MerkleTree:
         self.size = 0
 
         self.default_hash_level = {}
+        self.depth = depth
 
         self.leaf_to_change_digested_root = None
         self.signed_leaf_numbers = []
@@ -69,6 +70,10 @@ class MerkleTree:
             self.save_node(self.size - 1, self.size, hash_leaf)
 
     def init_defaults(self):
+        """
+        create the default levels hash value
+        :return: 
+        """
         i = 255
         leaf_value = "0"
         while i >= 0:
@@ -86,33 +91,37 @@ class MerkleTree:
         """
         if self.is_sparse:
             # in the sparse case it calculates the next level
-            temp = []
-            tempHash = ""
-            for x in self.node_to_be_calc:
-                flag = False
-                # even leaf case - checking if the brother is marked and calculating the hash accordingly
-                # otherwise - calculate the hash with the default value
-                if x.leaf_index % 2 == 0:
-                    for y in self.node_to_be_calc:
-                        if y.leaf_index == x.leaf_index + 1:
-                            tempHash = hash256(x.hash + y.hash)
-                            self.node_to_be_calc.remove(y)
-                            flag = True
-                    if not flag:
-                        tempHash = hash256(x.hash + self.default_leaf_Value)
-                # odd leaf case - checking if the brother is marked and calculating the hash accordingly
-                # otherwise - calculate the hash with the default value
-                elif x.leaf_index % 2 == 1:
-                    for y in self.node_to_be_calc:
-                        if y.leaf_index == x.leaf_index - 1:
-                            tempHash = hash256(y.hash + x.hash)
-                            self.node_to_be_calc.remove(y)
-                            flag = True
-                    if not flag:
-                        tempHash = hash256(self.default_leaf_Value + x.hash)
-                leafIndex = math.floor(x.leaf_index / 2)
-                temp.append(NodeLeaf(leafIndex, tempHash))
-            self.node_to_be_calc = temp.copy()
+            new_hash = ""
+            nodes_list = []
+
+            for leaf in self.node_to_be_calc:
+                """
+                this loop checks if it need to calculate new value for the left side or right
+                in case there is no need far a new hash calculate it use the default
+                """
+                is_same = False
+                if leaf.leaf_index % 2 == 0:
+                    # the left side
+                    for temp_leaf in self.node_to_be_calc:
+                        if temp_leaf.leaf_index == leaf.leaf_index + 1:
+                            new_hash = hash256(leaf.hash + temp_leaf.hash)
+                            self.node_to_be_calc.remove(temp_leaf)
+                            is_same = True
+                    if not is_same:
+                        new_hash = hash256(leaf.hash + self.default_leaf_Value)
+                else:
+                    # the right side
+                    for temp_leaf in self.node_to_be_calc:
+                        if temp_leaf.leaf_index == leaf.leaf_index - 1:
+                            new_hash = hash256(temp_leaf.hash + leaf.hash)
+                            self.node_to_be_calc.remove(temp_leaf)
+                            is_same = True
+                    if not is_same:
+                        new_hash = hash256(self.default_leaf_Value + leaf.hash)
+                nodes_list.append(NodeLeaf(math.floor(leaf.leaf_index / 2), new_hash))
+
+            # saves the list that has acumalated
+            self.node_to_be_calc = nodes_list.copy()
             self.default_leaf_Value = hash256(self.default_leaf_Value + self.default_leaf_Value)
         else:
             try:
@@ -147,117 +156,108 @@ class MerkleTree:
     def find_proof_of_inclusion(self, node_to_proof):
         """
         returns a list of hashed value
+        in case of sparse tree it creates proof according to some digest: it checks the node's neighbor is changed to 1
+        adn then adding to the proof path.
         :param node_to_proof: the node we look for to prove it contains to the tree
         :return: the path proof
         """
 
         if self.is_sparse:
-            '''creating proof for given digest. checking if the brother leaf or itself are marked and adding the hash
-            to the proof. If they are not existed - skip until they are existed'''
-            self.node_to_be_calc = self.signed_leaf_numbers.copy()
             self.default_leaf_Value = "0"
-            proof = ""
-            # special case - check if sparse tree is empty
+            self.node_to_be_calc = self.signed_leaf_numbers.copy()
+
+            path_of_proof = ""
             if len(self.signed_leaf_numbers) == 0:
-                proof = self.tree_root_calculate() + " " + self.tree_root_calculate()
-                return proof
-            tempIndex = int(node_to_proof, 16)
-            # create proof 255 times without the root
-            for i in range(256):
-                broExist = False
-                iExist = False
-                if tempIndex % 2 == 0:
-                    for y in self.node_to_be_calc:
-                        if y.leaf_index == tempIndex + 1:
-                            proof = proof + " " + y.hash
-                            broExist = True
-                        elif y.leaf_index == tempIndex:
-                            iExist = True
-                    if (not broExist) and iExist:
-                        proof = proof + " " + self.default_leaf_Value
-                elif tempIndex % 2 == 1:
-                    for y in self.node_to_be_calc:
-                        if y.leaf_index == tempIndex - 1:
-                            proof = proof + " " + y.hash
-                            broExist = True
-                        elif y.leaf_index == tempIndex:
-                            iExist = True
-                    if (not broExist) and iExist:
-                        proof = proof + " " + self.default_leaf_Value
-                # in case of last iteration - do not create the next level
-                if i != 255:
-                    self.merkle_tree_calculation()
-                    tempIndex = math.floor(tempIndex / 2)
-            # special case - if we found that half of the tree is empty - create the proof accordingly
-            if proof == "":
-                if tempIndex % 2 == 0:
-                    proof = self.default_leaf_Value + " " + self.node_to_be_calc[0].hash
+                # case of an empty tree
+                return self.tree_root_calculate() + " " + self.tree_root_calculate()
+            check_index = int(node_to_proof, 16)
+
+            for i in range(self.depth):
+                is_neighbor_exist, index_exist = False, False
+
+                if check_index % 2 == 0:
+                    for leaf in self.node_to_be_calc:
+                        if leaf.leaf_index == check_index + 1:
+                            path_of_proof = path_of_proof + " " + leaf.hash
+                            is_neighbor_exist = True
+                        elif not leaf.leaf_index != check_index:
+                            index_exist = True
+                    if not is_neighbor_exist:
+                        if index_exist:
+                            path_of_proof = path_of_proof + " " + self.default_leaf_Value
                 else:
-                    proof = self.node_to_be_calc[0].hash + " " + self.default_leaf_Value
-            proof = self.tree_root_calculate() + " " + proof
-            return proof
+                    for leaf in self.node_to_be_calc:
+                        if leaf.leaf_index == check_index - 1:
+                            path_of_proof = path_of_proof + " " + leaf.hash
+                            is_neighbor_exist = True
+                        elif leaf.leaf_index == check_index:
+                            index_exist = True
+                    if not is_neighbor_exist:
+                        if index_exist:
+                            path_of_proof = path_of_proof + " " + self.default_leaf_Value
+
+                if i != (self.depth - 1):
+                    # in order to not create new node
+                    self.merkle_tree_calculation()
+                    check_index = math.floor(check_index / 2)
+
+            if path_of_proof == "":
+                if check_index % 2 == 0:
+                    path_of_proof = self.default_leaf_Value + " " + self.node_to_be_calc[0].hash
+                else:
+                    path_of_proof = self.node_to_be_calc[0].hash + " " + self.default_leaf_Value
+            return self.tree_root_calculate() + " " + path_of_proof
         else:
             return self.rec_find_proof_of_inclusion(node_to_proof, 0, self.size)
 
     def validate_proof_of_inclusion(self, leaf_hash, root_hash, proof_of_inclusion):
         """
         checks if the proof of inclusion to leaf is true or not
+        in case of sparse we create the proof and the check the result
         :param leaf_hash: the leaf to check if the path is true
         :param root_hash: the tree root
         :param proof_of_inclusion: the path
         :return: true or false
         """
         if self.is_sparse:
-            """create proof by given digest and check if we need to mark the leaf. Then we check if the proof
-            is match to the given proof"""
-            # spliting input to array, poping the empty last element, and creating a tree for the proof validation
-            parseInput = proof_of_inclusion.split(" ")
-            # parseInput.pop()
-            proofLength = len(parseInput)
-            tmp = MerkleTree(True)
+            # init the path to proof into array
+            path_leaf_array = proof_of_inclusion.split(" ")
+            smt = MerkleTree(True, 256)
 
-            # in case sign is 1 mark the give leaf
             if root_hash == "1":
-                tmp.add_leaf(leaf_hash)
-            tmp.node_to_be_calc = tmp.signed_leaf_numbers.copy()
+                smt.add_leaf(leaf_hash)
+            # init the array we work on
+            smt.node_to_be_calc = smt.signed_leaf_numbers.copy()
 
-            # if sign was 0, then creating hash value of zeroes, in case was 1, creating hashes of the given digest
-            zero = "0"
-            for i in range(256 - (proofLength - 2)):
+            node_value = "0"
+            for i in range(self.depth - (len(path_leaf_array) - 2)):
                 if root_hash == "1":
-                    tmp.merkle_tree_calculation()
-                elif root_hash == "0":
-                    zero = hash256(zero + zero)
-
-            # in case sign is zero, check if given first node in proof is equal to the calculated zeroes hash
-            # in case sign is one check if given second node in proof is equal to the calculated digest hash
-            if root_hash == "0":
-                if (zero != parseInput[1]):
-                    return False
-            if root_hash == "1":
-                if tmp.node_to_be_calc[0].hash != parseInput[2]:
-                    return False
-
-            # Poping out the root, the given first node which is the zeroes hash and calculating the index of
-            # the digest after the hashes
-            root = parseInput.pop(0)
-            tmpHash = parseInput.pop(0)
-            tempIndex = int(leaf_hash, 16)
-            for p in range(257 - (proofLength - 2)):
-                tempIndex = math.floor(tempIndex / 2)
-
-            # according to given diget hash index concating the hashes and compute them
-            for x in parseInput:
-                if tempIndex % 2 == 1:
-                    tmpHash = hash256(x + tmpHash)
+                    smt.merkle_tree_calculation()
                 else:
-                    tmpHash = hash256(tmpHash + x)
+                    node_value = hash256(node_value + node_value)
 
-            # after hashing all of the proof, check if we got the root
-            if tmpHash != root:
+            if root_hash == "0" and node_value != path_leaf_array[1]:
+                return False
+            if root_hash == "1" and smt.node_to_be_calc[0].hash != path_leaf_array[2]:
+                return False
+
+            root = path_leaf_array[0]
+            hashed_leaf_target = path_leaf_array[1]
+            tree_temp_index = int(leaf_hash, 16)
+            for i in range((self.depth + 1) - (len(path_leaf_array) - 2)):
+                tree_temp_index = math.floor(tree_temp_index / 2)
+
+            for x in path_leaf_array[2:]:
+                if tree_temp_index % 2 == 1:
+                    hashed_leaf_target = hash256(x + hashed_leaf_target)
+                else:
+                    hashed_leaf_target = hash256(hashed_leaf_target + x)
+
+            if hashed_leaf_target != root:
                 return False
             return True
 
+        # the simple tree case
         edge_list = list(proof_of_inclusion.split(" "))
         for edge in edge_list:
             side = edge[0:1]
@@ -284,7 +284,7 @@ class MerkleTree:
             else:
                 self.node_to_be_calc = self.signed_leaf_numbers.copy()
                 self.default_leaf_Value = "0"
-                for i in range(256):
+                for i in range(self.depth):
                     self.merkle_tree_calculation()
                 return self.node_to_be_calc[0].hash
 
@@ -432,7 +432,7 @@ def hash256(node_data):
 if __name__ == '__main__':
 
     merkle_tree = MerkleTree()
-    sparse_merkle_tree = MerkleTree(True)
+    sparse_merkle_tree = MerkleTree(True, depth=256)
     sparse_merkle_tree.init_defaults()
 
     while True:
