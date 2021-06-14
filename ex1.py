@@ -459,7 +459,7 @@ if __name__ == '__main__':
             while raw:
                 user_string +='\n'+raw
                 raw = input()
-            signRoot(user_string, merkle_tree.tree_root_calculate())
+            print(signRoot(user_string, merkle_tree.tree_root_calculate()))
         elif user_number_choice.__eq__('7'):
             raw = input()
             pub_key = user_string
@@ -468,7 +468,10 @@ if __name__ == '__main__':
                 raw = input()
             raw = input()
             raw = raw.split()
-            verify(pub_key, raw[0], raw[1])
+            if verify(pub_key, raw[0], raw[1]):
+                print(True)
+            else:
+                print(False)
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
