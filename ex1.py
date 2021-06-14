@@ -1,4 +1,5 @@
 import base64
+import math
 from hashlib import sha256
 # from cryptography.exceptions import InvalidSignature
 # from cryptography.hazmat.primitives.asymmetric import rsa
@@ -9,18 +10,34 @@ from hashlib import sha256
 from base64 import b64encode
 
 
+class NodeLeaf:
+    """
+    the basic leaf class
+    """
+    def __init__(self, leaf_number, val):
+        self.leaf_index = leaf_number
+        self.hash = val
+
+
 class MerkleTree:
 
-    def __init__(self, sparse=False):
+    def __init__(self, is_sparse=False, default="0"):
         """
         size - the numbers of leaf in the tree
         also it initiate the tree as empty in the begin
         """
+        self.is_sparse = is_sparse
+
         self.hash_tree = {}
         self.size = 0
+
         self.default_hash_level = {}
-        self.is_sparse = sparse
+
         self.leaf_to_change_digested_root = None
+        self.signed_leaf_numbers = []
+
+        self.node_to_be_calc = []
+        self.default_leaf_Value = default
 
     def add_leaf(self, leaf_data):
         """
@@ -29,8 +46,21 @@ class MerkleTree:
         :return:
         """
         if self.is_sparse:
+            # in case i need it
+            is_leaf_added = False
             self.leaf_to_change_digested_root = "{0:08b}".format(int(leaf_data, 16))
-            # self.update_tree_values(self.leaf_to_change_digested_root)
+
+            user_leaf_number = int(leaf_data, 16)
+            for leaf_number in self.signed_leaf_numbers:
+                if leaf_number.leaf_index == user_leaf_number:
+                    is_leaf_added = True
+                    break
+
+            if not is_leaf_added:
+                self.hash_tree[user_leaf_number] = "1"
+                # add the leaf to the list of leaf that has been signed
+                self.signed_leaf_numbers.append(NodeLeaf(user_leaf_number, "1"))
+
         else:
             hash_leaf = hash256(leaf_data)
             self.size += 1
@@ -47,21 +77,52 @@ class MerkleTree:
             self.default_hash_level[i] = e
             i -= 1
 
-    def merkle_tree_calculation(self, l_index, r_index):
+    def merkle_tree_calculation(self, l_index=None, r_index=None):
         """
         calculate recursively the nodes and create new one in case it doesn't exist
         :param l_index:
         :param r_index:
         :return: the node number (l_index , r_index)
         """
-        try:
-            merkle_node = self.get_node(l_index, r_index)
-        except KeyError:
-            shared_index = l_index + closest_power(r_index - l_index)
-            merkle_node = hash256(self.merkle_tree_calculation(l_index, shared_index)
-                                  + self.merkle_tree_calculation(shared_index, r_index))
-            self.save_node(l_index, r_index, merkle_node)
-        return merkle_node
+        if self.is_sparse:
+            # in the sparse case it calculates the next level
+            temp = []
+            tempHash = ""
+            for x in self.node_to_be_calc:
+                flag = False
+                # even leaf case - checking if the brother is marked and calculating the hash accordingly
+                # otherwise - calculate the hash with the default value
+                if x.leaf_index % 2 == 0:
+                    for y in self.node_to_be_calc:
+                        if y.leaf_index == x.leaf_index + 1:
+                            tempHash = hash256(x.hash + y.hash)
+                            self.node_to_be_calc.remove(y)
+                            flag = True
+                    if not flag:
+                        tempHash = hash256(x.hash + self.default_leaf_Value)
+                # odd leaf case - checking if the brother is marked and calculating the hash accordingly
+                # otherwise - calculate the hash with the default value
+                elif x.leaf_index % 2 == 1:
+                    for y in self.node_to_be_calc:
+                        if y.leaf_index == x.leaf_index - 1:
+                            tempHash = hash256(y.hash + x.hash)
+                            self.node_to_be_calc.remove(y)
+                            flag = True
+                    if not flag:
+                        tempHash = hash256(self.default_leaf_Value + x.hash)
+                leafIndex = math.floor(x.leaf_index / 2)
+                temp.append(NodeLeaf(leafIndex, tempHash))
+            self.node_to_be_calc = temp.copy()
+            self.default_leaf_Value = hash256(self.default_leaf_Value + self.default_leaf_Value)
+        else:
+            try:
+                merkle_node = self.get_node(l_index, r_index)
+            except KeyError:
+                shared_index = l_index + closest_power(r_index - l_index)
+                merkle_node = hash256(self.merkle_tree_calculation(l_index, shared_index)
+                                      + self.merkle_tree_calculation(shared_index, r_index))
+                self.save_node(l_index, r_index, merkle_node)
+            return merkle_node
 
     def rec_find_proof_of_inclusion(self, node_to_proof, left, right):
         """
@@ -89,7 +150,54 @@ class MerkleTree:
         :param node_to_proof: the node we look for to prove it contains to the tree
         :return: the path proof
         """
-        return self.rec_find_proof_of_inclusion(node_to_proof, 0, self.size)
+
+        if self.is_sparse:
+            '''creating proof for given digest. checking if the brother leaf or itself are marked and adding the hash
+            to the proof. If they are not existed - skip until they are existed'''
+            self.node_to_be_calc = self.signed_leaf_numbers.copy()
+            self.default_leaf_Value = "0"
+            proof = ""
+            # special case - check if sparse tree is empty
+            if len(self.signed_leaf_numbers) == 0:
+                proof = self.tree_root_calculate() + " " + self.tree_root_calculate()
+                return proof
+            tempIndex = int(node_to_proof, 16)
+            # create proof 255 times without the root
+            for i in range(256):
+                broExist = False
+                iExist = False
+                if tempIndex % 2 == 0:
+                    for y in self.node_to_be_calc:
+                        if y.leaf_index == tempIndex + 1:
+                            proof = proof + " " + y.hash
+                            broExist = True
+                        elif y.leaf_index == tempIndex:
+                            iExist = True
+                    if (not broExist) and iExist:
+                        proof = proof + " " + self.default_leaf_Value
+                elif tempIndex % 2 == 1:
+                    for y in self.node_to_be_calc:
+                        if y.leaf_index == tempIndex - 1:
+                            proof = proof + " " + y.hash
+                            broExist = True
+                        elif y.leaf_index == tempIndex:
+                            iExist = True
+                    if (not broExist) and iExist:
+                        proof = proof + " " + self.default_leaf_Value
+                # in case of last iteration - do not create the next level
+                if i != 255:
+                    self.merkle_tree_calculation()
+                    tempIndex = math.floor(tempIndex / 2)
+            # special case - if we found that half of the tree is empty - create the proof accordingly
+            if proof == "":
+                if tempIndex % 2 == 0:
+                    proof = self.default_leaf_Value + " " + self.node_to_be_calc[0].hash
+                else:
+                    proof = self.node_to_be_calc[0].hash + " " + self.default_leaf_Value
+            proof = self.tree_root_calculate() + " " + proof
+            return proof
+        else:
+            return self.rec_find_proof_of_inclusion(node_to_proof, 0, self.size)
 
     def validate_proof_of_inclusion(self, leaf_hash, root_hash, proof_of_inclusion):
         """
@@ -99,6 +207,57 @@ class MerkleTree:
         :param proof_of_inclusion: the path
         :return: true or false
         """
+        if self.is_sparse:
+            """create proof by given digest and check if we need to mark the leaf. Then we check if the proof
+            is match to the given proof"""
+            # spliting input to array, poping the empty last element, and creating a tree for the proof validation
+            parseInput = proof_of_inclusion.split(" ")
+            # parseInput.pop()
+            proofLength = len(parseInput)
+            tmp = MerkleTree(True)
+
+            # in case sign is 1 mark the give leaf
+            if root_hash == "1":
+                tmp.add_leaf(leaf_hash)
+            tmp.node_to_be_calc = tmp.signed_leaf_numbers.copy()
+
+            # if sign was 0, then creating hash value of zeroes, in case was 1, creating hashes of the given digest
+            zero = "0"
+            for i in range(256 - (proofLength - 2)):
+                if root_hash == "1":
+                    tmp.merkle_tree_calculation()
+                elif root_hash == "0":
+                    zero = hash256(zero + zero)
+
+            # in case sign is zero, check if given first node in proof is equal to the calculated zeroes hash
+            # in case sign is one check if given second node in proof is equal to the calculated digest hash
+            if root_hash == "0":
+                if (zero != parseInput[1]):
+                    return False
+            if root_hash == "1":
+                if tmp.node_to_be_calc[0].hash != parseInput[2]:
+                    return False
+
+            # Poping out the root, the given first node which is the zeroes hash and calculating the index of
+            # the digest after the hashes
+            root = parseInput.pop(0)
+            tmpHash = parseInput.pop(0)
+            tempIndex = int(leaf_hash, 16)
+            for p in range(257 - (proofLength - 2)):
+                tempIndex = math.floor(tempIndex / 2)
+
+            # according to given diget hash index concating the hashes and compute them
+            for x in parseInput:
+                if tempIndex % 2 == 1:
+                    tmpHash = hash256(x + tmpHash)
+                else:
+                    tmpHash = hash256(tmpHash + x)
+
+            # after hashing all of the proof, check if we got the root
+            if tmpHash != root:
+                return False
+            return True
+
         edge_list = list(proof_of_inclusion.split(" "))
         for edge in edge_list:
             side = edge[0:1]
@@ -120,23 +279,14 @@ class MerkleTree:
         :return: the tree root. thus means node number (0, tree size)
         """
         if self.is_sparse:
-            direction = [char for char in self.leaf_to_change_digested_root]
-
-            def rec_root_calc(step_in_direction, counter):
-                counter += 1
-                if step_in_direction.__len__() == 1:
-                    if step_in_direction[0].__eq__('1'):
-                        return hash256("0") + hash256("1")
-                    else:
-                        return hash256("1") + hash256("0")
-                if step_in_direction[0].__eq__('1'):
-                    return hash256(self.default_hash_level[counter] + rec_root_calc(step_in_direction[1:], counter))
-                else:
-                    return hash256(rec_root_calc(step_in_direction[1:], counter) + self.default_hash_level[counter])
-            if direction[0].__eq__('1'):
-                return hash256(self.default_hash_level[1] + rec_root_calc(direction[1:], 1))
+            if len(self.signed_leaf_numbers) == 0:
+                return self.default_hash_level[0]
             else:
-                return hash256(rec_root_calc(direction[0], 1) + self.default_hash_level[1])
+                self.node_to_be_calc = self.signed_leaf_numbers.copy()
+                self.default_leaf_Value = "0"
+                for i in range(256):
+                    self.merkle_tree_calculation()
+                return self.node_to_be_calc[0].hash
 
         if self.size > 0:
             return self.merkle_tree_calculation(0, self.size)
@@ -236,6 +386,7 @@ def generatePem(passphrase=None):
     )
     print(f"{private_pem.decode()}\n{public_pem.decode()}")
 
+
 def signRoot(pr_key,root):
     pr_key = serialization.load_pem_private_key(pr_key.encode(), password=None)
     if root is not None:
@@ -248,6 +399,7 @@ def signRoot(pr_key,root):
             hashes.SHA256()
         )
     return b64encode(signature).decode()
+
 
 def verify(pub_key, signature, msg):
     
@@ -266,6 +418,7 @@ def verify(pub_key, signature, msg):
         return True
     except InvalidSignature:
         return False
+
 
 def hash256(node_data):
     """
@@ -297,27 +450,31 @@ if __name__ == '__main__':
         elif user_number_choice.__eq__('4'):
             user_string, tree_root, leaf_path = parse_user_path_input(user_string)
             print(merkle_tree.validate_proof_of_inclusion(hash256(user_string), tree_root, leaf_path))
-        # elif user_number_choice.__eq__('5'):
-        #     generatePem()
-        # elif user_number_choice.__eq__('6'):
-        #     raw = input()
-        #     while raw:
-        #         user_string +='\n'+raw
-        #         raw = input()
-        #     signRoot(user_string, merkle_tree.tree_root_calculate())
-        # elif user_number_choice.__eq__('7'):
-        #     raw = input()
-        #     pub_key = user_string
-        #     while raw:
-        #         pub_key +='\n'+raw
-        #         raw = input()
-        #     raw = input()
-        #     raw = raw.split()
-        #     verify(pub_key, raw[0], raw[1])
+        elif user_number_choice.__eq__('5'):
+            generatePem()
+        elif user_number_choice.__eq__('6'):
+            raw = input()
+            while raw:
+                user_string +='\n'+raw
+                raw = input()
+            signRoot(user_string, merkle_tree.tree_root_calculate())
+        elif user_number_choice.__eq__('7'):
+            raw = input()
+            pub_key = user_string
+            while raw:
+                pub_key +='\n'+raw
+                raw = input()
+            raw = input()
+            raw = raw.split()
+            verify(pub_key, raw[0], raw[1])
         elif user_number_choice.__eq__('8'):
             sparse_merkle_tree.add_leaf(user_string)
         elif user_number_choice.__eq__('9'):
             print(sparse_merkle_tree.tree_root_calculate())
-        elif user_number_choice.__eq__('exit'):
-            print("bye bye! ")
-            break
+        elif user_number_choice.__eq__('10'):
+            print(sparse_merkle_tree.find_proof_of_inclusion(user_string))
+        elif user_number_choice.__eq__('11'):
+            user_string, value, leaf_path = parse_user_path_input(user_string)
+            print(sparse_merkle_tree.validate_proof_of_inclusion(user_string, value, leaf_path))
+        else:
+            print("")
