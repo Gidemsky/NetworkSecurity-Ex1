@@ -1,3 +1,5 @@
+# Gideon Dembovsky, 203570007, Evyatar Shtern,
+
 import base64
 import math
 from hashlib import sha256
